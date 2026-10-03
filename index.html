@@ -1,0 +1,727 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Heavy Bag Kru</title>
+<meta name="description" content="Muay Thai heavy bag round timer that calls the twenty most recommended combinations out loud.">
+<meta name="theme-color" content="#0c0e12">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Bag Kru">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="apple-touch-icon" href="icon-180.png">
+<link rel="icon" href="icon-192.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@500;600;700&family=Sarabun:wght@400;500;600;700&display=swap">
+<style>html{box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px);background:#0c0e12}body{margin:0;background:#0c0e12}[hidden]{display:none!important}</style>
+</head>
+<body>
+<style>
+/* Layout: a one-screen, phone-first coach console. Round pips across the top, the timer as the
+   dominant object, the called combination directly under it, controls pinned to the bottom.
+   Combos and Settings sit behind a segmented control. Dark by choice: a gym timer on a phone at the bag. */
+:root{
+  --bg:#0c0e12;          /* ink, blue-biased black */
+  --panel:#151922;
+  --panel-2:#1d2330;
+  --line:#2b3344;
+  --fg:#f1e9d6;          /* bone */
+  --muted:#98a1b1;
+  --gold:#f0b23a;        /* saffron: the round, the timer */
+  --gold-ink:#1a1200;
+  --rest:#5cc8d2;        /* rest phase */
+  --warn:#ff5a4e;        /* last ten seconds */
+  --font-display:"Chakra Petch","Barlow Condensed","Arial Narrow",sans-serif;
+  --font-body:"Sarabun","Helvetica Neue",Arial,sans-serif;
+  color-scheme:dark;
+}
+html,body{height:100%}
+body{margin:0;background:var(--bg);color:var(--fg);font-family:var(--font-body);font-size:16px;line-height:1.45;-webkit-font-smoothing:antialiased;-webkit-text-size-adjust:100%}
+*{box-sizing:border-box}
+button{font:inherit}
+.app{height:100%;display:flex;flex-direction:column;max-width:560px;margin:0 auto;padding-inline:16px}
+header.top{display:flex;flex-direction:column;gap:10px;padding-block:12px 6px;flex:none}
+.brand{display:flex;align-items:baseline;justify-content:space-between;gap:10px;font-family:var(--font-display);font-weight:700;letter-spacing:.1em;font-size:14px;text-transform:uppercase}
+.brand .th{font-family:var(--font-body);font-weight:600;letter-spacing:0;text-transform:none;color:var(--gold);font-size:14px}
+.tabs{display:flex;background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:3px;gap:3px}
+.tab{flex:1;background:none;border:0;color:var(--muted);font-family:var(--font-display);font-weight:600;letter-spacing:.08em;text-transform:uppercase;font-size:13px;padding:8px 0;border-radius:8px;cursor:pointer}
+.tab.is-on{background:var(--panel-2);color:var(--fg)}
+button:focus-visible,select:focus-visible,input:focus-visible{outline:2px solid var(--gold);outline-offset:2px}
+main{flex:1;min-height:0;overflow-y:auto;display:flex;flex-direction:column;-webkit-overflow-scrolling:touch}
+.view{display:flex;flex-direction:column;gap:14px;padding-block:8px 16px}
+#view-train{flex:1;justify-content:center;gap:12px}
+.pips{display:grid;grid-template-columns:repeat(var(--n,10),1fr);gap:5px}
+.pip{height:6px;border-radius:3px;background:var(--line)}
+.pip.done{background:var(--gold)}
+.pip.now{background:var(--gold);opacity:.55;animation:pulse 1.2s ease-in-out infinite}
+.pip.next{background:var(--rest);opacity:.55}
+.phase-row{display:flex;justify-content:space-between;align-items:baseline;gap:10px;font-family:var(--font-display);text-transform:uppercase;letter-spacing:.1em}
+.phase{font-weight:700;font-size:15px;color:var(--gold)}
+body[data-phase=rest] .phase{color:var(--rest)}
+body[data-phase=ready] .phase,body[data-phase=idle] .phase,body[data-phase=done] .phase{color:var(--muted)}
+.round{color:var(--muted);font-size:13px;text-align:right}
+.timer{font-family:var(--font-display);font-weight:700;font-size:clamp(84px,28vw,156px);line-height:1;text-align:center;color:var(--gold);display:flex;justify-content:center;padding-block:4px}
+.timer span{display:inline-block;width:.6em;text-align:center}
+.timer span.colon{width:.32em;position:relative;top:-.06em}
+body[data-phase=rest] .timer{color:var(--rest)}
+body[data-phase=ready] .timer,body[data-phase=idle] .timer,body[data-phase=done] .timer{color:var(--fg)}
+body.last10 .timer{color:var(--warn);animation:blink 1s steps(2,start) infinite}
+.callout{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:14px 16px;min-height:120px;display:flex;flex-direction:column;gap:8px;justify-content:center}
+.callout.called{animation:flash .9s ease-out}
+.callout-k{font-family:var(--font-display);font-size:12px;letter-spacing:.14em;text-transform:uppercase;color:var(--muted)}
+.callout-txt{font-family:var(--font-display);font-weight:700;font-size:clamp(24px,7vw,36px);line-height:1.12;text-transform:uppercase;text-wrap:balance;overflow-wrap:anywhere}
+.callout-txt .dot{color:var(--gold);padding-inline:.18em}
+.callout-meta{font-size:13px;color:var(--muted)}
+.def{color:var(--rest)}
+.callout.isdef{border-color:var(--rest)}
+.callout.isdef .callout-k{color:var(--rest)}
+#defList.dim .combo .t,#defList.dim .combo .why{opacity:.45}
+.status{font-size:13px;color:var(--muted);display:flex;flex-wrap:wrap;gap:4px 14px;justify-content:center;text-align:center}
+.status b{font-weight:600;color:var(--fg)}
+footer.controls{flex:none;display:grid;grid-template-columns:2fr 1fr 1fr;gap:8px;padding-block:10px calc(12px + env(safe-area-inset-bottom,0px))}
+.btn{font-family:var(--font-display);font-weight:700;letter-spacing:.08em;text-transform:uppercase;font-size:15px;padding:14px 10px;border-radius:12px;border:1px solid var(--line);background:var(--panel);color:var(--fg);cursor:pointer;min-width:0}
+.btn.primary{background:var(--gold);color:var(--gold-ink);border-color:var(--gold)}
+.btn.ghost{background:transparent}
+.btn.small{padding:8px 12px;font-size:13px;border-radius:9px}
+.btn:disabled{opacity:.38;cursor:default}
+.btn.armed{border-color:var(--warn);color:var(--warn)}
+.h{font-family:var(--font-display);font-size:12px;letter-spacing:.14em;text-transform:uppercase;color:var(--muted);margin:6px 0 -6px 2px;font-weight:600}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:2px 14px}
+.row{display:flex;justify-content:space-between;align-items:center;gap:12px;padding-block:11px;border-bottom:1px solid var(--line)}
+.row:last-child{border-bottom:0}
+.row .l{font-weight:600;font-size:15px;min-width:0}
+.row .hint{display:block;font-size:12.5px;color:var(--muted);font-weight:400;line-height:1.35;margin-top:1px}
+select{background:var(--panel-2);color:var(--fg);border:1px solid var(--line);border-radius:8px;padding:8px 10px;font:inherit;font-size:15px;max-width:52%;flex:none}
+input[type=range]{width:42%;flex:none;accent-color:var(--gold);margin:0}
+.sw{appearance:none;-webkit-appearance:none;width:46px;height:28px;border-radius:14px;background:var(--line);position:relative;cursor:pointer;flex:none;margin:0;border:0}
+.sw::after{content:"";position:absolute;top:3px;left:3px;width:22px;height:22px;border-radius:50%;background:var(--fg);transition:transform .15s}
+.sw:checked{background:var(--gold)}
+.sw:checked::after{transform:translateX(18px);background:var(--gold-ink)}
+.note{font-size:13.5px;color:var(--muted);margin:0 2px;line-height:1.5}
+.note b{color:var(--fg);font-weight:600}
+.combos-head{display:flex;justify-content:space-between;align-items:flex-end;gap:10px}
+.combos-head .h{margin:0 0 2px 2px}
+.sub{margin:0;font-size:13.5px;color:var(--muted)}
+.combo{display:grid;grid-template-columns:28px 1fr auto;gap:2px 10px;padding-block:12px;border-bottom:1px solid var(--line);align-items:start}
+.combo:last-child{border-bottom:0}
+.combo .n{font-family:var(--font-display);font-weight:700;color:var(--muted);font-size:13px;padding-top:4px}
+.combo .t{font-family:var(--font-display);font-weight:700;font-size:16px;line-height:1.25;text-transform:uppercase;letter-spacing:.02em;min-width:0;overflow-wrap:anywhere}
+.combo .t .dot{color:var(--gold);padding-inline:.15em}
+.combo .why{grid-column:2;font-size:13.5px;color:var(--muted);line-height:1.45;margin-top:3px}
+.combo .meta{grid-column:2;display:flex;flex-wrap:wrap;gap:6px;margin-top:7px}
+.combo.off .t,.combo.off .why{opacity:.45}
+.lvl{font-family:var(--font-display);font-size:11px;letter-spacing:.08em;text-transform:uppercase;padding:2px 8px;border-radius:999px;border:1px solid var(--line);color:var(--muted)}
+.lvl.l1{border-color:#3f7a4a;color:#8fd79a}
+.lvl.l2{border-color:#8a6a1f;color:var(--gold)}
+.lvl.l3{border-color:#8a3b34;color:#ff8b82}
+.thai{font-size:12px;color:var(--muted);letter-spacing:.02em;align-self:center}
+.glossary .row{align-items:flex-start}
+.glossary .l{flex:none;width:34%}
+.gl{font-size:13.5px;color:var(--muted);line-height:1.5;text-align:right;min-width:0}
+.summary{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.summary div{background:var(--panel-2);border-radius:10px;padding:10px 12px}
+.summary .k{font-size:12px;color:var(--muted);text-transform:uppercase;letter-spacing:.1em;font-family:var(--font-display)}
+.summary .v{font-family:var(--font-display);font-weight:700;font-size:26px;line-height:1.1}
+@keyframes pulse{0%,100%{opacity:.45}50%{opacity:1}}
+@keyframes blink{0%{opacity:1}50%{opacity:.35}}
+@keyframes flash{0%{border-color:var(--gold);box-shadow:0 0 0 4px rgba(240,178,58,.28)}100%{border-color:var(--line);box-shadow:none}}
+@media (prefers-reduced-motion:reduce){.callout.called,.pip.now,body.last10 .timer{animation:none}.sw::after{transition:none}}
+@media (max-width:360px){.btn{font-size:13px;padding:13px 6px}}
+</style>
+
+<div class="app" id="app">
+  <header class="top">
+    <div class="brand"><span>Heavy Bag Kru</span><span class="th">มวยไทย · 10 ยก</span></div>
+    <nav class="tabs" role="tablist" aria-label="Sections">
+      <button class="tab is-on" role="tab" aria-selected="true" data-tab="train" id="tabTrain">Train</button>
+      <button class="tab" role="tab" aria-selected="false" data-tab="combos" id="tabCombos">Combos</button>
+      <button class="tab" role="tab" aria-selected="false" data-tab="settings" id="tabSettings">Settings</button>
+    </nav>
+  </header>
+
+  <main>
+    <section id="view-train" class="view" role="tabpanel">
+      <div class="pips" id="pips" aria-hidden="true"></div>
+      <div class="phase-row"><span id="phaseLabel" class="phase">Ready</span><span id="roundLabel" class="round"></span></div>
+      <div class="timer" id="timer" aria-live="off"></div>
+      <div class="callout" id="callout" aria-live="polite">
+        <div class="callout-k" id="calloutK">Combination</div>
+        <div class="callout-txt" id="calloutTxt"></div>
+        <div class="callout-meta" id="calloutMeta"></div>
+      </div>
+      <div class="status" id="status"></div>
+    </section>
+
+    <section id="view-combos" class="view" role="tabpanel" hidden>
+      <div class="combos-head">
+        <div><h2 class="h">The twenty</h2><p class="sub" id="comboCount"></p></div>
+        <button class="btn small ghost" id="btnAllOn">All on</button>
+      </div>
+      <div class="card" id="comboList"></div>
+      <div class="combos-head">
+        <div><h2 class="h">Defence counters</h2><p class="sub" id="defCount"></p></div>
+      </div>
+      <div class="card" id="defList"></div>
+      <p class="note">Switch a combination off to drop it from the calls. The list is ordered by how many independent coaches, fighters and gyms recommend each one; the strike names follow your naming setting.</p>
+      <h2 class="h">Thai gym vocabulary</h2>
+      <div class="card glossary">
+        <div class="row"><span class="l">Weapons</span><span class="gl">mat หมัด punch · sok ศอก elbow · khao เข่า knee · te เตะ kick · thip ถีบ teep</span></div>
+        <div class="row"><span class="l">Trainer cues</span><span class="gl">reng · power &nbsp; reow reow · faster &nbsp; bao bao · light &nbsp; sabai · relax &nbsp; sung · higher &nbsp; pack · break</span></div>
+        <div class="row"><span class="l">Ten seconds</span><span class="gl">Thai gyms clap two wooden sticks together ten seconds before the bell. This app does the same.</span></div>
+      </div>
+    </section>
+
+    <section id="view-settings" class="view" role="tabpanel" hidden>
+      <h2 class="h">Rounds</h2>
+      <div class="card">
+        <div class="row"><label class="l" for="setRounds">Rounds</label><select id="setRounds"></select></div>
+        <div class="row"><label class="l" for="setRoundLen">Round length</label><select id="setRoundLen"></select></div>
+        <div class="row"><label class="l" for="setRest">Rest between rounds</label><select id="setRest"></select></div>
+      </div>
+      <h2 class="h">Calls</h2>
+      <div class="card">
+        <div class="row"><label class="l" for="setPace">Gap between combos<span class="hint" id="paceHint"></span></label><input type="range" id="setPace" min="4" max="15" step="1" aria-describedby="paceHint"></div>
+        <div class="row"><label class="l" for="setReps">Reps per combo<span class="hint">Calls "again" for each extra rep</span></label><select id="setReps"><option value="1">1</option><option value="2">2</option><option value="3">3</option></select></div>
+        <div class="row"><label class="l" for="setLevel">Difficulty</label><select id="setLevel"><option value="1">Beginner only</option><option value="2">Up to intermediate</option><option value="3">All twenty</option></select></div>
+        <div class="row"><label class="l" for="setNaming">Strike names</label><select id="setNaming"><option value="leadrear">Lead / rear</option><option value="lr">Left / right</option></select></div>
+        <div class="row" id="rowStance"><label class="l" for="setStance">Stance</label><select id="setStance"><option value="orthodox">Orthodox</option><option value="southpaw">Southpaw</option></select></div>
+        <div class="row"><label class="l" for="setNumbers">Number the punches<span class="hint">1 jab · 2 cross · 3 lead hook · 4 rear hook · 5 lead uppercut · 6 rear uppercut</span></label><input type="checkbox" class="sw" id="setNumbers"></div>
+        <div class="row"><label class="l" for="setThirty">Thirty-second call</label><input type="checkbox" class="sw" id="setThirty"></div>
+        <div class="row"><label class="l" for="setBurnout">Burnout finish<span class="hint">Last 20 seconds of each round: nonstop punches, knees or kicks</span></label><input type="checkbox" class="sw" id="setBurnout"></div>
+        <div class="row"><label class="l" for="setDefence">Defence counters<span class="hint">Calls a defence on its own ("Check left!"), then the counter about a second later. Checks alternate left and right at random</span></label><input type="checkbox" class="sw" id="setDefence"></div>
+        <div class="row" id="rowDefFreq"><label class="l" for="setDefFreq">How often</label><select id="setDefFreq"><option value="5">About 1 call in 5</option><option value="3">About 1 call in 3</option><option value="2">About 1 call in 2</option></select></div>
+      </div>
+      <h2 class="h">Voice</h2>
+      <div class="card">
+        <div class="row"><label class="l" for="setVoice">Voice<span class="hint">Kru Niwat is a Thai man's voice with recorded calls; the others are your device's voices</span></label><select id="setVoice"></select></div>
+        <div class="row"><label class="l" for="setRate">Speed<span class="hint" id="rateHint"></span></label><input type="range" id="setRate" min="0.7" max="1.5" step="0.05" aria-describedby="rateHint"></div>
+        <div class="row"><span class="l">Audio check<span class="hint">Rings the bell, then calls one combination</span></span><button class="btn small" id="btnTest">Test</button></div>
+      </div>
+      <p class="note"><b>Phone tips.</b> Turn the media volume up. On an iPhone, flip the ring/silent switch to ring if you hear nothing. Keep the screen on during a session: the app asks the phone to stay awake, but a locked screen can silence the voice.</p>
+    </section>
+  </main>
+
+  <footer class="controls">
+    <button class="btn primary" id="btnMain">Start</button>
+    <button class="btn ghost" id="btnSkip" disabled>Skip</button>
+    <button class="btn ghost" id="btnReset" disabled>Reset</button>
+  </footer>
+</div>
+
+<script>
+(function(){
+'use strict';
+var $=function(s){return document.querySelector(s)};
+
+/* ---------- Strike vocabulary ----------
+   name: lead/rear wording · lr: left/right wording ({S} = side word) · num: boxing number when "number the punches" is on */
+var STRIKES={
+  jab:    {name:'jab',                 lr:'jab',                    side:'lead', num:'one',   kind:'punch'},
+  djab:   {name:'double jab',          lr:'double jab',             side:'lead', num:'one, one', kind:'punch'},
+  cross:  {name:'cross',               lr:'cross',                  side:'rear', num:'two',   kind:'punch'},
+  lhook:  {name:'lead hook',           lr:'{S} hook',               side:'lead', num:'three', kind:'punch'},
+  rhook:  {name:'rear hook',           lr:'{S} hook',               side:'rear', num:'four',  kind:'punch'},
+  lupper: {name:'lead uppercut',       lr:'{S} uppercut',           side:'lead', num:'five',  kind:'punch'},
+  rupper: {name:'rear uppercut',       lr:'{S} uppercut',           side:'rear', num:'six',   kind:'punch'},
+  lbody:  {name:'lead hook to the body',lr:'{S} hook to the body',  side:'lead', num:'three to the body', kind:'punch'},
+  overhand:{name:'overhand',           lr:'overhand {S}',           side:'rear', num:null,    kind:'punch'},
+  lelbow: {name:'lead elbow',          lr:'{S} elbow',              side:'lead', kind:'elbow'},
+  relbow: {name:'rear elbow',          lr:'{S} elbow',              side:'rear', kind:'elbow'},
+  upelbow:{name:'up elbow',            lr:'{S} up elbow',           side:'rear', kind:'elbow'},
+  lknee:  {name:'lead knee',           lr:'{S} knee',               side:'lead', kind:'knee'},
+  rknee:  {name:'rear knee',           lr:'{S} knee',               side:'rear', kind:'knee'},
+  swknee: {name:'switch knee',         lr:'switch knee',            side:'lead', kind:'knee'},
+  lteep:  {name:'lead teep',           lr:'{S} teep',               side:'lead', kind:'kick'},
+  rteep:  {name:'rear teep',           lr:'{S} teep',               side:'rear', kind:'kick'},
+  lowkick:{name:'low kick',            lr:'{S} low kick',           side:'rear', kind:'kick'},
+  inlow:  {name:'inside low kick',     lr:'{S} inside low kick',    side:'lead', kind:'kick'},
+  rkick:  {name:'rear kick',           lr:'{S} kick',               side:'rear', kind:'kick'},
+  swkick: {name:'switch kick',         lr:'switch kick',            side:'lead', kind:'kick'},
+  rhead:  {name:'rear head kick',      lr:'{S} head kick',          side:'rear', kind:'kick'},
+  swhead: {name:'switch head kick',    lr:'switch head kick',       side:'lead', kind:'kick'}
+};
+
+/* ---------- The twenty combinations ----------
+   Ranked by how many independent sources recommend each: 60+ pages across Evolve MMA, Muay Thai Guy,
+   Yokkao, Fairtex, Fight Quality, Sweet Science of Fighting, 8limbs, Legacy, Sherdog threads and coach blogs.
+   Variants with one strike swapped were merged. Pure boxing combinations are capped at the two most cited
+   so the rotation uses all eight limbs. src = combined source count. */
+var COMBOS=[
+  {id:'c01', s:['jab','cross','lhook','lowkick'], lvl:1, src:16, why:'The go-to combination in every source set. The one-two lifts the guard, the hook keeps them expecting hands and shifts your weight onto the front leg, so the low kick fires with no extra step.'},
+  {id:'c02', s:['jab','cross','lowkick'], lvl:1, src:12, why:'Called the bread and butter of Muay Thai. The cross turns the hips and loads the rear low kick; step slightly outside on the cross to line up the thigh.'},
+  {id:'c03', s:['jab','cross','lhook'], lvl:1, src:17, why:'Once they expect only the one-two, the cross turns their head and the hook finds the open side. The hook rotation also pre-loads a rear kick.'},
+  {id:'c04', s:['jab','cross'], lvl:1, src:20, why:'The one-two, cited more than anything else. The jab measures the distance and the cross comes through behind it. Thai trainers want it fast and relaxed.'},
+  {id:'c05', s:['jab','cross','lelbow'], lvl:2, src:12, why:'The punches walk you into elbow range and the elbow still lands if the cross is slipped. Swap in a rear elbow after a lead hook for the classic four-count.'},
+  {id:'c06', s:['jab','cross','rkick'], lvl:1, src:8, why:'Punches occupy the guard up high and the body kick lands underneath. Pivot on the standing foot and swing through the bag.'},
+  {id:'c07', s:['jab','lteep'], lvl:1, src:12, why:'One of the most used pairings at every level. The jab makes them think hands; the teep controls the range and knocks them off balance.'},
+  {id:'c08', s:['jab','cross','swkick'], lvl:2, src:10, why:'The switch adds power and its speed hides the telegraph. It lands to the open side while they reset from the punches.'},
+  {id:'c09', s:['jab','rkick'], lvl:1, src:9, why:'Jab to gauge the distance and break their rhythm, then the rear kick before they reset. Earlier low kicks make them expect low.'},
+  {id:'c10', s:['jab','cross','lhook','rkick'], lvl:2, src:8, why:'Three punches raise the hands and the body opens. The hook turns you into the kick, so there is no pause between them.'},
+  {id:'c11', s:['lteep','rkick'], lvl:2, src:10, why:'The teep knocks their balance off-centre; the rear kick lands with full force while they recover. Fake the second teep and go to the kick.'},
+  {id:'c12', s:['inlow','cross','lhook','lowkick'], lvl:2, src:10, who:'Rodtang', why:'Kick first, then punch, then kick again. The inside low kick disturbs their balance and pulls them into the cross; the punches push their weight onto the lead leg so the last kick chops it.'},
+  {id:'c13', s:['lhook','lowkick'], lvl:1, src:8, who:'Ramon Dekkers · Liam Harrison', why:'The Dutch hook-kick. The hook pulls the guard up and turns the hips, so the low kick comes out already loaded. Feint the hook and the kick still lands.'},
+  {id:'c14', s:['jab','cross','rknee'], lvl:2, src:7, why:'Straight punches walk you into clinch range; frame with the lead arm and drive the rear knee up the middle.'},
+  {id:'c15', s:['lteep','rknee'], lvl:2, src:6, why:'After the teep they close the distance again and walk straight into knee range. Step in behind the knee.'},
+  {id:'c16', s:['swkick','cross','lhook','lowkick'], lvl:3, src:6, why:'The Thai four-count. Each strike rotates the hips the opposite way, so the next one comes out loaded. Fighters on the forums call it the staple pad combination.'},
+  {id:'c17', s:['cross','lowkick'], lvl:1, src:4, who:'Nong-O', why:'Same-side cross and low kick. Nong-O calls it his favourite attack: basic, and extremely effective. The cross commits their weight, the kick takes the leg.'},
+  {id:'c18', s:['lteep','cross','lhook'], lvl:2, src:7, why:'Teep and follow. Plant the teeping foot and fire the cross down the middle as they step back in, then the hook.'},
+  {id:'c19', s:['jab','cross','lbody','lowkick'], lvl:2, src:6, why:'The body hook drops their elbows and shifts their weight forward, so the low kick cannot be checked.'},
+  {id:'c20', s:['cross','lhook','cross','lowkick'], lvl:2, src:6, why:'Fast heavy hands keep the guard high and disguise the kick. The Dutch version of the one-two-three-two.'}
+];
+/* ---------- Defence counters ----------
+   d = the defence called on its own; s = the counter called about a second later. */
+var DEFS={check:'Check left / right',block:'Block',slip:'Slip',roll:'Roll',pull:'Pull back',parry:'Parry',longguard:'Long guard',stepback:'Step back'};
+var DEFENCE=[
+  {id:'d01', d:'check', s:['cross','lowkick'], lvl:1, why:'The standard Thai return. Check the kick on the shin, put the foot down into the cross and kick the leg they just landed on.'},
+  {id:'d02', d:'check', s:['rkick'], lvl:1, why:'Check and return. Their kicking leg is still landing, so your kick arrives before they can check it.'},
+  {id:'d03', d:'check', s:['cross','lhook','lowkick'], lvl:2, why:'Check, punch them while they reset their stance, and finish on the leg.'},
+  {id:'d04', d:'block', s:['cross','lhook'], lvl:1, why:'Cover the hook or head kick on the arms, then fire straight back down the middle while their arm is still out.'},
+  {id:'d05', d:'slip', s:['cross','lhook','lowkick'], lvl:2, why:'Slip outside the jab and counter down the pipe, hook, and take the leg.'},
+  {id:'d06', d:'slip', s:['rupper','lhook'], lvl:2, why:'Slip inside and come up with the uppercut; the hook follows as their head lifts.'},
+  {id:'d07', d:'roll', s:['lhook','cross'], lvl:2, why:'Roll under the hook and come back on the same side; the cross finishes.'},
+  {id:'d08', d:'pull', s:['cross','rkick'], lvl:3, why:'Lean back out of range of the punch, return the cross as their weight comes forward, then kick.'},
+  {id:'d09', d:'parry', s:['cross','lowkick'], lvl:1, why:'Parry the jab across with the rear hand and the cross is already loaded; the low kick follows.'},
+  {id:'d10', d:'longguard', s:['rknee'], lvl:2, why:'Push the lead arm into their face to stop them coming in, then drive the rear knee as they stall.'},
+  {id:'d11', d:'stepback', s:['lteep'], lvl:1, why:'Step out of range as they rush, then stop them on the teep as they follow.'}
+];
+var BURNOUTS=[
+  {label:'Straight punches', say:'Burn out. Straight punches, nonstop'},
+  {label:'Knees', say:'Burn out. Knees, nonstop'},
+  {label:'Kicks', say:'Burn out. Kicks, nonstop'},
+  {label:'Hooks', say:'Burn out. Hooks, nonstop'},
+  {label:'Elbows', say:'Burn out. Elbows, nonstop'}
+];
+
+/* ---------- Settings ---------- */
+var DEF={rounds:10,roundLen:180,rest:60,pace:8,reps:1,level:3,naming:'leadrear',stance:'orthodox',numbers:false,thirty:true,burnout:true,defence:false,defFreq:3,voice:'kru',rate:1.0};
+var LS='hbk.v1';
+var S={}, disabled={};
+(function load(){
+  var j={};
+  try{ j=JSON.parse(localStorage.getItem(LS)||'{}')||{}; }catch(e){ j={}; }
+  for(var k in DEF){ S[k]=(j.S && j.S[k]!==undefined)?j.S[k]:DEF[k]; }
+  if(S.voice==='') S.voice='kru';
+  (j.off||[]).forEach(function(id){disabled[id]=true;});
+})();
+function save(){ try{ localStorage.setItem(LS, JSON.stringify({S:S, off:Object.keys(disabled)})); }catch(e){} }
+
+/* ---------- Naming ---------- */
+function sideWord(side){
+  if(S.stance==='southpaw') return side==='lead'?'right':'left';
+  return side==='lead'?'left':'right';
+}
+function strikeSay(id){
+  var st=STRIKES[id]; if(!st) return id;
+  if(S.numbers && st.num) return st.num;
+  if(S.naming==='lr') return st.lr.replace('{S}', sideWord(st.side));
+  return st.name;
+}
+function comboWords(c){ return c.s.map(strikeSay); }
+function comboSpeech(c){ return comboWords(c).join(', ')+'.'; }
+function comboHTML(c){ return comboWords(c).map(esc).join('<span class="dot">·</span>'); }
+function esc(s){ return String(s).replace(/[&<>"]/g,function(ch){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[ch];}); }
+function fmt(sec){ sec=Math.max(0,Math.ceil(sec)); var m=Math.floor(sec/60), s=sec%60; return m+':'+(s<10?'0':'')+s; }
+function fmtWords(sec){ if(sec%60===0){ var m=sec/60; return m+(m===1?' minute':' minutes'); } return sec+' seconds'; }
+function rnd(a){ return a[Math.floor(Math.random()*a.length)]; }
+
+/* ---------- Audio: bell, clapper, beep ---------- */
+var ctx=null;
+function ensureAudio(){
+  try{
+    if(!ctx){ var AC=window.AudioContext||window.webkitAudioContext; if(AC) ctx=new AC(); }
+    if(ctx) loadClips();
+    if(ctx && ctx.state==='suspended') ctx.resume();
+  }catch(e){ ctx=null; }
+}
+function bell(n){
+  if(!ctx) return;
+  var t0=ctx.currentTime+0.02;
+  for(var i=0;i<n;i++){
+    var t=t0+i*0.42;
+    [[1,0.5],[2.0,0.22],[2.76,0.16],[4.07,0.08],[5.4,0.05]].forEach(function(p){
+      var o=ctx.createOscillator(), g=ctx.createGain();
+      o.type='sine'; o.frequency.value=1046*p[0];
+      g.gain.setValueAtTime(0.0001,t); g.gain.exponentialRampToValueAtTime(p[1],t+0.006); g.gain.exponentialRampToValueAtTime(0.0001,t+1.5);
+      o.connect(g); g.connect(ctx.destination); o.start(t); o.stop(t+1.6);
+    });
+  }
+}
+var noiseBuf=null;
+function clapper(){
+  if(!ctx) return;
+  if(!noiseBuf){ noiseBuf=ctx.createBuffer(1,ctx.sampleRate*0.08,ctx.sampleRate); var d=noiseBuf.getChannelData(0); for(var i=0;i<d.length;i++) d[i]=Math.random()*2-1; }
+  var t0=ctx.currentTime+0.02;
+  for(var k=0;k<3;k++){
+    var t=t0+k*0.2;
+    var src=ctx.createBufferSource(); src.buffer=noiseBuf;
+    var bp=ctx.createBiquadFilter(); bp.type='bandpass'; bp.frequency.value=2200; bp.Q.value=1.2;
+    var g=ctx.createGain(); g.gain.setValueAtTime(0.9,t); g.gain.exponentialRampToValueAtTime(0.0001,t+0.07);
+    src.connect(bp); bp.connect(g); g.connect(ctx.destination); src.start(t); src.stop(t+0.09);
+  }
+}
+function beep(){
+  if(!ctx) return;
+  var t=ctx.currentTime+0.01, o=ctx.createOscillator(), g=ctx.createGain();
+  o.type='square'; o.frequency.value=880;
+  g.gain.setValueAtTime(0.0001,t); g.gain.exponentialRampToValueAtTime(0.12,t+0.005); g.gain.exponentialRampToValueAtTime(0.0001,t+0.14);
+  o.connect(g); g.connect(ctx.destination); o.start(t); o.stop(t+0.16);
+}
+
+/* ---------- Speech ---------- */
+var synth=('speechSynthesis' in window)?window.speechSynthesis:null;
+var voices=[], keep=[];
+function loadVoices(){
+  if(!synth) return;
+  voices=synth.getVoices().filter(function(v){return /^en/i.test(v.lang);});
+  if(!voices.length) voices=synth.getVoices();
+  fillVoiceSelect();
+  updateStatus();
+}
+function pickVoice(){
+  var v=null;
+  if(S.voice) v=voices.filter(function(x){return x.voiceURI===S.voice;})[0];
+  if(!v){
+    var prefs=['en-AU','en_AU','en-GB','en_GB','en-US','en_US'];
+    for(var i=0;i<prefs.length && !v;i++) v=voices.filter(function(x){return x.lang.indexOf(prefs[i])===0 && !/eloquence|compact/i.test(x.name);})[0];
+    if(!v) v=voices[0]||null;
+  }
+  return v;
+}
+function say(text, priority){
+  if(!synth) return;
+  var speakNow=function(){
+    var u=new SpeechSynthesisUtterance(text);
+    var v=pickVoice(); if(v){ u.voice=v; u.lang=v.lang; } else u.lang='en-US';
+    u.rate=S.rate; u.pitch=1; u.volume=1;
+    keep.push(u); if(keep.length>10) keep.shift();
+    try{ synth.resume(); synth.speak(u); }catch(e){}
+  };
+  if(priority){ try{ synth.cancel(); }catch(e){} setTimeout(speakNow,60); }
+  else speakNow();
+}
+function hush(){ if(synth){ try{ synth.cancel(); }catch(e){} } stopClips(); }
+if(synth){ synth.onvoiceschanged=loadVoices; loadVoices(); setTimeout(loadVoices,400); setTimeout(loadVoices,1500); }
+
+/* ---------- Kru Niwat: recorded calls (Thai male neural voice), played through Web Audio ---------- */
+var CLIPS={"jab":"clips/jab.mp3","double jab":"clips/double-jab.mp3","cross":"clips/cross.mp3","lead hook":"clips/lead-hook.mp3","rear hook":"clips/rear-hook.mp3","lead uppercut":"clips/lead-uppercut.mp3","rear uppercut":"clips/rear-uppercut.mp3","lead hook to the body":"clips/lead-hook-to-the-body.mp3","overhand":"clips/overhand.mp3","lead elbow":"clips/lead-elbow.mp3","rear elbow":"clips/rear-elbow.mp3","up elbow":"clips/up-elbow.mp3","lead knee":"clips/lead-knee.mp3","rear knee":"clips/rear-knee.mp3","switch knee":"clips/switch-knee.mp3","lead teep":"clips/lead-teep.mp3","rear teep":"clips/rear-teep.mp3","low kick":"clips/low-kick.mp3","inside low kick":"clips/inside-low-kick.mp3","rear kick":"clips/rear-kick.mp3","switch kick":"clips/switch-kick.mp3","rear head kick":"clips/rear-head-kick.mp3","switch head kick":"clips/switch-head-kick.mp3","left hook":"clips/left-hook.mp3","right hook":"clips/right-hook.mp3","left uppercut":"clips/left-uppercut.mp3","right uppercut":"clips/right-uppercut.mp3","left hook to the body":"clips/left-hook-to-the-body.mp3","right hook to the body":"clips/right-hook-to-the-body.mp3","overhand left":"clips/overhand-left.mp3","overhand right":"clips/overhand-right.mp3","left elbow":"clips/left-elbow.mp3","right elbow":"clips/right-elbow.mp3","left up elbow":"clips/left-up-elbow.mp3","right up elbow":"clips/right-up-elbow.mp3","left knee":"clips/left-knee.mp3","right knee":"clips/right-knee.mp3","left teep":"clips/left-teep.mp3","right teep":"clips/right-teep.mp3","left low kick":"clips/left-low-kick.mp3","right low kick":"clips/right-low-kick.mp3","left inside low kick":"clips/left-inside-low-kick.mp3","right inside low kick":"clips/right-inside-low-kick.mp3","left kick":"clips/left-kick.mp3","right kick":"clips/right-kick.mp3","left head kick":"clips/left-head-kick.mp3","right head kick":"clips/right-head-kick.mp3","one":"clips/one.mp3","two":"clips/two.mp3","three":"clips/three.mp3","four":"clips/four.mp3","five":"clips/five.mp3","six":"clips/six.mp3","one, one":"clips/one-one.mp3","three to the body":"clips/three-to-the-body.mp3","Again":"clips/again.mp3","Go":"clips/go.mp3","Time":"clips/time.mp3","Rest":"clips/rest.mp3","Ten seconds":"clips/ten-seconds.mp3","Twenty seconds":"clips/twenty-seconds.mp3","Thirty seconds":"clips/thirty-seconds.mp3","Get ready":"clips/get-ready.mp3","Round one in ten seconds":"clips/round-one-in-ten-seconds.mp3","Next":"clips/next.mp3","Session complete. Nice work":"clips/session-complete-nice-work.mp3","Burn out. Straight punches, nonstop":"clips/burn-out-straight-punches-nonstop.mp3","Burn out. Knees, nonstop":"clips/burn-out-knees-nonstop.mp3","Burn out. Hooks, nonstop":"clips/burn-out-hooks-nonstop.mp3","Burn out. Elbows, nonstop":"clips/burn-out-elbows-nonstop.mp3","Round one":"clips/round-one.mp3","Round two":"clips/round-two.mp3","Round three":"clips/round-three.mp3","Round four":"clips/round-four.mp3","Round five":"clips/round-five.mp3","Round six":"clips/round-six.mp3","Round seven":"clips/round-seven.mp3","Round eight":"clips/round-eight.mp3","Round nine":"clips/round-nine.mp3","Round ten":"clips/round-ten.mp3","Round eleven":"clips/round-eleven.mp3","Round twelve":"clips/round-twelve.mp3","Round thirteen":"clips/round-thirteen.mp3","Round fourteen":"clips/round-fourteen.mp3","Round fifteen":"clips/round-fifteen.mp3","Round sixteen":"clips/round-sixteen.mp3","Round seventeen":"clips/round-seventeen.mp3","Round eighteen":"clips/round-eighteen.mp3","Round nineteen":"clips/round-nineteen.mp3","Round twenty":"clips/round-twenty.mp3","Block":"clips/block.mp3","Slip":"clips/slip.mp3","Roll":"clips/roll.mp3","Pull back":"clips/pull-back.mp3","Parry":"clips/parry.mp3","Long guard":"clips/long-guard.mp3","Step back":"clips/step-back.mp3","Check left":"clips/check-left.mp3","Check right":"clips/check-right.mp3","Burn out. Kicks, nonstop":"clips/burn-out-kicks-nonstop.mp3"};
+var NUMW=['zero','one','two','three','four','five','six','seven','eight','nine','ten','eleven','twelve','thirteen','fourteen','fifteen','sixteen','seventeen','eighteen','nineteen','twenty'];
+function rw(n){ return NUMW[n]||String(n); }
+var clipBuf={}, clipTrim={}, clipSrcs=[], clipEnd=0, clipsLoaded=0, clipTotal=Object.keys(CLIPS).length, clipsStarted=false;
+function loadClips(){
+  if(!ctx || clipsStarted || !window.fetch) return; clipsStarted=true;
+  Object.keys(CLIPS).forEach(function(k){
+    fetch(CLIPS[k]).then(function(r){ if(!r.ok) throw new Error('http '+r.status); return r.arrayBuffer(); })
+      .then(function(ab){ return new Promise(function(res,rej){ ctx.decodeAudioData(ab,res,rej); }); })
+      .then(function(b){ clipBuf[k]=b; clipTrim[k]=trimPoints(b); clipsLoaded++; if(clipsLoaded%10===0||clipsLoaded===clipTotal) updateStatus(); })
+      .catch(function(){});
+  });
+}
+function trimPoints(b){
+  var d=b.getChannelData(0), th=0.015, s=0, e=d.length-1;
+  while(s<e && Math.abs(d[s])<th) s++;
+  while(e>s && Math.abs(d[e])<th) e--;
+  var off=Math.max(0, s/b.sampleRate-0.04), dur=Math.min(b.duration-off, (e-s)/b.sampleRate+0.14);
+  return {off:off, dur:dur};
+}
+function clipsReady(seq){ for(var i=0;i<seq.length;i++){ if(!clipBuf[seq[i]]) return false; } return true; }
+function stopClips(){ clipSrcs.forEach(function(x){ try{ x.stop(); }catch(e){} }); clipSrcs=[]; clipEnd=0; }
+function playSeq(seq, priority){
+  if(priority) stopClips();
+  var rate=Math.min(1.25, Math.max(0.85, S.rate));
+  var t=Math.max(ctx.currentTime+0.03, clipEnd);
+  seq.forEach(function(k){
+    var b=clipBuf[k], tp=clipTrim[k], src=ctx.createBufferSource();
+    src.buffer=b; src.playbackRate.value=rate; src.connect(ctx.destination);
+    src.start(t, tp.off, tp.dur); clipSrcs.push(src);
+    t+=tp.dur/rate+0.06;
+  });
+  clipEnd=t;
+  if(clipSrcs.length>40) clipSrcs=clipSrcs.slice(-20);
+}
+/* Every spoken line goes through announce(): recorded clips when Kru Niwat is selected and loaded, otherwise the device voice. */
+function announce(seq, priority, joiner, ttsText){
+  if(S.voice==='kru' && ctx && clipsReady(seq)){ playSeq(seq, !!priority); return; }
+  say(ttsText || (seq.join(joiner||'. ')+'.'), !!priority);
+}
+
+/* ---------- Wake lock ---------- */
+var wl=null;
+function keepAwake(){
+  if(!('wakeLock' in navigator) || wl) { updateStatus(); return; }
+  navigator.wakeLock.request('screen').then(function(l){ wl=l; l.addEventListener('release',function(){ wl=null; updateStatus(); }); updateStatus(); }).catch(function(){ wl=null; updateStatus(); });
+}
+function releaseAwake(){ if(wl){ try{ wl.release(); }catch(e){} wl=null; } updateStatus(); }
+
+/* ---------- Session ---------- */
+var ses=null, timerId=null, lastTimerText='', lastPicks=[], stats={combos:0,rounds:0};
+
+function pool(){
+  var p=COMBOS.filter(function(c){return !disabled[c.id] && c.lvl<=S.level;});
+  if(!p.length) p=COMBOS.filter(function(c){return c.lvl<=S.level;});
+  if(!p.length) p=COMBOS.slice();
+  return p;
+}
+function defPool(){ return DEFENCE.filter(function(c){return !disabled[c.id] && c.lvl<=S.level;}); }
+var lastDefs=[];
+function pickDef(){
+  var p=defPool(), cand=p.filter(function(c){return lastDefs.indexOf(c.id)<0;});
+  if(!cand.length) cand=p;
+  var c=rnd(cand); lastDefs.push(c.id); if(lastDefs.length>Math.min(3,p.length-1)) lastDefs.shift();
+  return c;
+}
+function defWord(c){ return c.d==='check' ? (Math.random()<0.5?'Check left':'Check right') : DEFS[c.d]; }
+function defHTML(c,w){ return '<span class="def">'+esc(w||DEFS[c.d])+'</span><span class="dot">·</span>'+comboHTML(c); }
+function pickCombo(){
+  var p=pool(), cand=p.filter(function(c){return lastPicks.indexOf(c.id)<0;});
+  if(cand.length<1) cand=p;
+  var c=rnd(cand);
+  lastPicks.push(c.id); if(lastPicks.length>Math.min(3,p.length-1)) lastPicks.shift();
+  return c;
+}
+function buildEvents(phase, r, L){
+  var ev=[];
+  if(phase==='ready'){
+    ev.push({at:0,grace:99,fn:function(){ announce(['Get ready','Round one in ten seconds'], true, '. ', 'Get ready. '+S.rounds+(S.rounds===1?' round, ':' rounds, ')+fmtWords(S.roundLen)+' each, '+fmtWords(S.rest)+' rest. Round one in ten seconds.'); }});
+    [7,8,9].forEach(function(t){ ev.push({at:t,grace:1.5,fn:beep}); });
+  }
+  if(phase==='round'){
+    ev.push({at:0,grace:99,fn:function(){ bell(1); announce(['Round '+rw(r),'Go'], true, '. ', 'Round '+r+'. Go!'); setCallout('Round '+r, 'Fight', ''); }});
+    var burn = S.burnout && L>=60;
+    if(S.thirty && L>=75) ev.push({at:L-30,grace:3,fn:function(){ announce(['Thirty seconds']); }});
+    if(burn) ev.push({at:L-20,grace:3,fn:function(){ var b=rnd(BURNOUTS); setCallout('Burnout', b.label, 'Nonstop until the bell'); announce(['Twenty seconds', b.say], true); }});
+    ev.push({at:L-10,grace:3,fn:function(){ clapper(); if(!burn) announce(['Ten seconds']); }});
+    var stopAt=L-(burn?23:7), t=4, n=0, lastWasDef=false, defOn=S.defence && defPool().length>0, DEFGAP=1.3;
+    while(t<stopAt){
+      n++;
+      var isDef = defOn && !lastWasDef && Math.random() < 1/S.defFreq;
+      lastWasDef=isDef;
+      var c = isDef ? pickDef() : pickCombo(), words=comboWords(c);
+      if(isDef){ var dw=defWord(c); ev.push(defEvent(t,c,n,dw)); ev.push(counterEvent(t+DEFGAP,c,words,dw)); }
+      else ev.push(comboEvent(t,c,words,n));
+      var lead = isDef ? DEFGAP : 0;
+      var dur=lead+0.45*words.length+1.9;
+      for(var k=1;k<S.reps;k++) ev.push({at:t+k*dur,grace:2.5,fn:sayAgain});
+      t += S.pace + lead + 0.35*words.length + (S.reps-1)*dur + (Math.random()*3-1.5);
+    }
+  }
+  if(phase==='rest'){
+    ev.push({at:0,grace:99,fn:function(){ announce(['Time','Rest'], true, '. ', 'Time. Rest. '+fmtWords(S.rest)+'.'); setCallout('Rest', 'Breathe', 'Round '+(r+1)+' of '+S.rounds+' next'); }});
+    if(L>=20) ev.push({at:L-10,grace:3,fn:function(){ announce(['Ten seconds','Round '+rw(r+1),'Next'], false, '. ', 'Ten seconds. Round '+(r+1)+' next.'); }});
+    [L-3,L-2,L-1].forEach(function(t){ if(t>0) ev.push({at:t,grace:1.5,fn:beep}); });
+  }
+  return ev;
+}
+function comboEvent(t,c,words,idx){
+  return {at:t,grace:2.5,fn:function(){ stats.combos++; setCallout('Combination '+idx, comboHTML(c), 'No. '+(COMBOS.indexOf(c)+1)+' of '+COMBOS.length+' · '+lvlName(c.lvl), true); announce(words, false, ', '); }};
+}
+function defEvent(t,c,idx,dw){
+  return {at:t,grace:2.0,fn:function(){ stats.combos++; setCallout('Defence · call '+idx, '<span class="def">'+esc(dw)+'</span>', 'Make it, then wait for the counter', true, 'isdef'); announce([dw]); }};
+}
+function counterEvent(t,c,words,dw){
+  return {at:t,grace:2.0,fn:function(){ setCallout('Counter', defHTML(c,dw), 'Defence counter '+(DEFENCE.indexOf(c)+1)+' of '+DEFENCE.length+' · '+lvlName(c.lvl), true, 'isdef'); announce(words, false, ', '); }};
+}
+function sayAgain(){ announce(['Again']); }
+function lvlName(l){ return l===1?'Beginner':l===2?'Intermediate':'Advanced'; }
+
+function startSession(){
+  ensureAudio(); keepAwake();
+  stats={combos:0,rounds:0}; lastPicks=[]; lastDefs=[];
+  ses={phase:'idle',round:0,len:0,start:0,events:[],paused:false,pausedEl:0};
+  startPhase('ready',1);
+  if(timerId) clearInterval(timerId);
+  timerId=setInterval(tick,100);
+  renderControls();
+}
+function startPhase(phase, r){
+  var L= phase==='ready'?10 : phase==='round'?S.roundLen : S.rest;
+  ses.phase=phase; ses.round=r; ses.len=L; ses.start=Date.now(); ses.events=buildEvents(phase,r,L);
+  document.body.dataset.phase=phase; document.body.classList.remove('last10');
+  renderStatic(); tick();
+}
+function tick(){
+  if(!ses || ses.paused || ses.phase==='done' || ses.phase==='idle') return;
+  var el=(Date.now()-ses.start)/1000;
+  for(var i=0;i<ses.events.length;i++){ var e=ses.events[i]; if(!e.done && el>=e.at){ e.done=true; if(el-e.at<=e.grace){ try{ e.fn(); }catch(err){} } } }
+  var rem=Math.max(0, ses.len-el);
+  renderTimer(rem);
+  if(ses.phase==='round'||ses.phase==='rest') document.body.classList.toggle('last10', rem<=10 && rem>0 && ses.len>15);
+  if(el>=ses.len) nextPhase();
+}
+function nextPhase(){
+  var p=ses.phase, r=ses.round;
+  if(p==='ready'){ startPhase('round',1); }
+  else if(p==='round'){ stats.rounds++; bell(3); if(r>=S.rounds) finish(); else startPhase('rest',r); }
+  else if(p==='rest'){ startPhase('round',r+1); }
+}
+function finish(){
+  ses.phase='done'; document.body.dataset.phase='done'; document.body.classList.remove('last10');
+  if(timerId){ clearInterval(timerId); timerId=null; }
+  announce(['Time','Session complete. Nice work'], true, '. ', "Time. That's "+S.rounds+(S.rounds===1?' round.':' rounds.')+' Session complete. Nice work.');
+  releaseAwake();
+  renderStatic(); renderTimer(0);
+  setCallout('Session complete', '<div class="summary"><div><div class="k">Rounds</div><div class="v">'+stats.rounds+'</div></div><div><div class="k">Combos called</div><div class="v">'+stats.combos+'</div></div></div>', 'Tap Start to go again.');
+  renderControls();
+}
+function pause(){ if(!ses||ses.paused||ses.phase==='done') return; ses.paused=true; ses.pausedEl=(Date.now()-ses.start)/1000; hush(); $('#phaseLabel').textContent='Paused'; renderControls(); }
+function resume(){ if(!ses||!ses.paused) return; ensureAudio(); keepAwake(); ses.start=Date.now()-ses.pausedEl*1000; ses.paused=false; renderStatic(); renderControls(); tick(); }
+function skip(){
+  if(!ses||ses.phase==='done'||ses.phase==='idle') return;
+  hush(); ensureAudio();
+  ses.events.forEach(function(e){e.done=true;});
+  if(ses.paused){ ses.paused=false; }
+  if(ses.phase==='round'){ ses.start=Date.now()-ses.len*1000; }
+  nextPhase(); renderControls();
+}
+var resetArmed=null;
+function reset(){
+  if(!ses) return;
+  if(!resetArmed){ resetArmed=setTimeout(function(){ resetArmed=null; $('#btnReset').classList.remove('armed'); $('#btnReset').textContent='Reset'; },3000); $('#btnReset').classList.add('armed'); $('#btnReset').textContent='Sure?'; return; }
+  clearTimeout(resetArmed); resetArmed=null; $('#btnReset').classList.remove('armed'); $('#btnReset').textContent='Reset';
+  if(timerId){ clearInterval(timerId); timerId=null; }
+  hush(); releaseAwake(); ses=null; document.body.dataset.phase='idle'; document.body.classList.remove('last10');
+  renderIdle(); renderControls();
+}
+
+/* ---------- Rendering ---------- */
+function renderTimer(rem){
+  var txt=fmt(rem); if(txt===lastTimerText) return; lastTimerText=txt;
+  var h=''; for(var i=0;i<txt.length;i++){ var ch=txt[i]; h+= ch===':'?'<span class="colon">:</span>':'<span>'+ch+'</span>'; }
+  $('#timer').innerHTML=h;
+}
+function renderPips(done, now, next){
+  var n=S.rounds, h=''; for(var i=1;i<=n;i++){ h+='<div class="pip'+(i<=done?' done':i===now?' now':i===next?' next':'')+'"></div>'; }
+  var p=$('#pips'); p.style.setProperty('--n', n); p.innerHTML=h;
+}
+function renderStatic(){
+  var ph=$('#phaseLabel'), rl=$('#roundLabel');
+  if(!ses || ses.phase==='idle'){ renderIdle(); return; }
+  if(ses.phase==='ready'){ ph.textContent='Get ready'; rl.textContent='Round 1 of '+S.rounds; renderPips(0,0,1); }
+  else if(ses.phase==='round'){ ph.textContent='Round'; rl.textContent='Round '+ses.round+' of '+S.rounds; renderPips(ses.round-1,ses.round,0); }
+  else if(ses.phase==='rest'){ ph.textContent='Rest'; rl.textContent='Next: round '+(ses.round+1)+' of '+S.rounds; renderPips(ses.round,0,ses.round+1); }
+  else if(ses.phase==='done'){ ph.textContent='Complete'; rl.textContent=S.rounds+' of '+S.rounds; renderPips(S.rounds,0,0); }
+}
+function renderIdle(){
+  $('#phaseLabel').textContent='Ready';
+  $('#roundLabel').textContent=S.rounds+(S.rounds===1?' round · ':' rounds · ')+fmt(S.roundLen)+' work · '+fmt(S.rest)+' rest';
+  renderPips(0,0,0); lastTimerText=''; renderTimer(S.roundLen);
+  var p=pool();
+  var dp=S.defence?defPool().length:0;
+  setCallout('Session', 'Tap Start', p.length+' combinations'+(dp?' and '+dp+' defence counters':'')+' in rotation · a new call about every '+S.pace+' seconds · the phone speaks every call');
+}
+function setCallout(k, html, meta, flash, cls){
+  $('#calloutK').textContent=k; $('#calloutTxt').innerHTML=html; $('#calloutMeta').textContent=meta||'';
+  var c=$('#callout'); c.classList.remove('called'); c.classList.toggle('isdef', cls==='isdef'); if(flash){ void c.offsetWidth; c.classList.add('called'); }
+}
+function renderControls(){
+  var main=$('#btnMain'), skipB=$('#btnSkip'), resetB=$('#btnReset');
+  var state=!ses?'idle':ses.phase==='done'?'done':ses.paused?'paused':'running';
+  main.textContent= state==='idle'?'Start' : state==='done'?'Start again' : state==='paused'?'Resume':'Pause';
+  main.classList.toggle('primary', state!=='running');
+  skipB.disabled=(state==='idle'||state==='done');
+  resetB.disabled=(state==='idle');
+}
+function updateStatus(){
+  var v=pickVoice();
+  var voice= S.voice==='kru' ? '<b>Kru Niwat</b>'+(clipsLoaded<clipTotal?' · loading '+clipsLoaded+'/'+clipTotal:'') : !synth?'<b>no voice</b> in this browser' : voices.length? '<b>'+esc(v?v.name:'default')+'</b>' : 'voice loading';
+  var screen= !('wakeLock' in navigator)?'screen may sleep' : wl?'screen <b>awake</b>':'screen awake while running';
+  $('#status').innerHTML='<span>Voice: '+voice+'</span><span>'+screen+'</span>';
+}
+
+/* ---------- Combos tab ---------- */
+function comboCard(c,i,isDef){
+  var off=!!disabled[c.id];
+  return '<div class="combo'+(off?' off':'')+'">'+
+     '<div class="n">'+(i+1)+'</div>'+
+     '<div class="t">'+(isDef?defHTML(c):comboHTML(c))+'</div>'+
+     '<input type="checkbox" class="sw" id="sw_'+c.id+'" data-id="'+c.id+'" aria-label="Include '+(isDef?'defence counter ':'combination ')+(i+1)+'"'+(off?'':' checked')+'>'+
+     '<div class="why">'+esc(c.why)+'</div>'+
+     '<div class="meta"><span class="lvl l'+c.lvl+'">'+lvlName(c.lvl)+'</span>'+(isDef?'':'<span class="thai">'+c.src+' sources'+(c.who?' · '+esc(c.who):'')+'</span>')+'</div>'+
+     '</div>';
+}
+function renderCombos(){
+  var host=$('#comboList'), dhost=$('#defList'), on=0, don=0;
+  host.innerHTML=COMBOS.map(function(c,i){ if(!disabled[c.id]) on++; return comboCard(c,i,false); }).join('');
+  dhost.innerHTML=DEFENCE.map(function(c,i){ if(!disabled[c.id]) don++; return comboCard(c,i,true); }).join('');
+  $('#comboCount').textContent=on+' of '+COMBOS.length+' in rotation';
+  $('#defCount').textContent= S.defence ? don+' of '+DEFENCE.length+' in rotation · about 1 call in '+S.defFreq : 'Off · turn on in Settings';
+  dhost.classList.toggle('dim', !S.defence);
+  Array.prototype.forEach.call(document.querySelectorAll('#comboList input.sw, #defList input.sw'),function(sw){
+    sw.addEventListener('change',function(){ if(sw.checked) delete disabled[sw.dataset.id]; else disabled[sw.dataset.id]=true; save(); renderCombos(); if(!ses) renderIdle(); });
+  });
+}
+$('#btnAllOn').addEventListener('click',function(){ disabled={}; save(); renderCombos(); if(!ses) renderIdle(); });
+
+/* ---------- Settings tab ---------- */
+function opt(sel, vals, labels, cur){
+  var el=$(sel); el.innerHTML=vals.map(function(v,i){ return '<option value="'+v+'"'+(String(v)===String(cur)?' selected':'')+'>'+labels[i]+'</option>'; }).join('');
+}
+function fillVoiceSelect(){
+  var el=$('#setVoice'), kru=(S.voice==='kru');
+  var h='<option value="kru"'+(kru?' selected':'')+'>Kru Niwat · Thai man (recorded)</option>';
+  var cur=pickVoice();
+  h+=voices.map(function(v){ return '<option value="'+esc(v.voiceURI)+'"'+(!kru&&cur&&v.voiceURI===cur.voiceURI?' selected':'')+'>'+esc(v.name)+' ('+esc(v.lang)+')</option>'; }).join('');
+  el.innerHTML=h;
+}
+function initSettings(){
+  var rounds=[]; for(var i=1;i<=20;i++) rounds.push(i);
+  opt('#setRounds', rounds, rounds, S.rounds);
+  var rl=[60,90,120,150,180,240,300]; opt('#setRoundLen', rl, rl.map(fmt), S.roundLen);
+  var rs=[30,45,60,90,120]; opt('#setRest', rs, rs.map(fmt), S.rest);
+  $('#setPace').value=S.pace; $('#setReps').value=S.reps; $('#setLevel').value=S.level; $('#setNaming').value=S.naming; $('#setStance').value=S.stance;
+  $('#setNumbers').checked=S.numbers; $('#setThirty').checked=S.thirty; $('#setBurnout').checked=S.burnout; $('#setRate').value=S.rate; $('#setDefence').checked=S.defence; $('#setDefFreq').value=S.defFreq;
+  hints();
+  function bind(id, key, parse){ $(id).addEventListener('change',function(e){ S[key]=parse(e.target); save(); hints(); renderCombos(); if(!ses) renderIdle(); }); }
+  var num=function(t){return Number(t.value);}, str=function(t){return t.value;}, chk=function(t){return !!t.checked;};
+  bind('#setRounds','rounds',num); bind('#setRoundLen','roundLen',num); bind('#setRest','rest',num);
+  bind('#setPace','pace',num); bind('#setReps','reps',num); bind('#setLevel','level',num);
+  bind('#setNaming','naming',str); bind('#setStance','stance',str); bind('#setNumbers','numbers',chk);
+  bind('#setThirty','thirty',chk); bind('#setBurnout','burnout',chk); bind('#setRate','rate',num); bind('#setDefence','defence',chk); bind('#setDefFreq','defFreq',num);
+  $('#setPace').addEventListener('input',function(e){ S.pace=Number(e.target.value); hints(); });
+  $('#setRate').addEventListener('input',function(e){ S.rate=Number(e.target.value); hints(); });
+  $('#setVoice').addEventListener('change',function(e){ S.voice=e.target.value; save(); updateStatus(); });
+  $('#btnTest').addEventListener('click',function(){ ensureAudio(); bell(1); var c=rnd(pool()); setTimeout(function(){ announce(comboWords(c), true, ', '); },500); switchTab('train'); setCallout('Audio check', comboHTML(c), 'If you heard the bell and the call, you are set.', true); });
+}
+function hints(){
+  $('#paceHint').textContent='About '+S.pace+' seconds from one call to the next';
+  $('#rateHint').textContent=S.rate.toFixed(2).replace(/0$/,'')+'× normal speed';
+  $('#rowStance').hidden=(S.naming!=='lr');
+  $('#rowDefFreq').hidden=!S.defence;
+}
+
+/* ---------- Tabs & controls ---------- */
+var curTab='train';
+function switchTab(name){
+  curTab=name;
+  ['train','combos','settings'].forEach(function(t){
+    $('#view-'+t).hidden=(t!==name);
+    var b=document.querySelector('.tab[data-tab="'+t+'"]'); b.classList.toggle('is-on',t===name); b.setAttribute('aria-selected', t===name?'true':'false');
+  });
+  if(name==='combos') renderCombos();
+}
+Array.prototype.forEach.call(document.querySelectorAll('.tab'),function(b){ b.addEventListener('click',function(){ switchTab(b.dataset.tab); }); });
+$('#btnMain').addEventListener('click',function(){
+  if(!ses || ses.phase==='done'){ switchTab('train'); startSession(); }
+  else if(ses.paused) resume(); else pause();
+});
+$('#btnSkip').addEventListener('click',skip);
+$('#btnReset').addEventListener('click',reset);
+document.addEventListener('visibilitychange',function(){ if(document.visibilityState==='visible'){ if(ses && !ses.paused && ses.phase!=='done') keepAwake(); tick(); } });
+document.addEventListener('keydown',function(e){ if(e.code==='Space' && e.target.tagName!=='SELECT' && e.target.tagName!=='INPUT' && e.target.tagName!=='BUTTON'){ e.preventDefault(); $('#btnMain').click(); } });
+
+window.HBK={buildEvents:buildEvents,S:S,COMBOS:COMBOS,DEFENCE:DEFENCE,defPool:defPool,comboSpeech:comboSpeech,pool:pool,announce:announce,clips:function(){return clipsLoaded+'/'+clipTotal;}};
+/* ---------- Boot ---------- */
+function boot(data){
+  initSettings(); renderCombos(); renderIdle(); renderControls(); ensureAudio(); updateStatus();
+  document.body.dataset.phase='idle';
+  if(data && data.tab) switchTab(data.tab);
+}
+try{ if(window.claude && window.claude.hot && window.claude.hot.snapshot) window.claude.hot.snapshot(function(){ return {tab:curTab}; }); }catch(e){}
+if(window.claude && window.claude.hot && window.claude.hot.ready) window.claude.hot.ready(boot); else boot((window.claude&&window.claude.hot&&window.claude.hot.data)||{});
+})();
+</script>
+<script>if('serviceWorker' in navigator){window.addEventListener('load',function(){navigator.serviceWorker.register('sw.js').catch(function(){});});}</script>
+</body>
+</html>
