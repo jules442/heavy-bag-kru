@@ -53,6 +53,10 @@ button:focus-visible,select:focus-visible,input:focus-visible{outline:2px solid 
 main{flex:1;min-height:0;overflow-y:auto;display:flex;flex-direction:column;-webkit-overflow-scrolling:touch}
 .view{display:flex;flex-direction:column;gap:14px;padding-block:8px 16px}
 #view-train{flex:1;justify-content:center;gap:12px}
+.art{display:block;width:100%;max-width:100%;height:auto;aspect-ratio:3/2;object-fit:cover;border-radius:14px;border:1px solid var(--line);background:var(--panel)}
+.art-wide{aspect-ratio:2/1}
+body:not([data-phase=idle]) #artIdle{display:none}
+body:not([data-phase=done]) #artDone{display:none}
 .pips{display:grid;grid-template-columns:repeat(var(--n,10),1fr);gap:5px}
 .pip{height:6px;border-radius:3px;background:var(--line)}
 .pip.done{background:var(--gold)}
@@ -144,6 +148,8 @@ input[type=range]{width:42%;flex:none;accent-color:var(--gold);margin:0}
 
   <main>
     <section id="view-train" class="view" role="tabpanel">
+      <img class="art art-wide" id="artIdle" src="images/gym-night.jpg" alt="A heavy bag hanging in a Thai gym at night" width="1400" height="933">
+      <img class="art art-wide" id="artDone" src="images/finish.jpg" alt="Mongkol, armbands and hand wraps resting on a bench" width="1400" height="933">
       <div class="pips" id="pips" aria-hidden="true"></div>
       <div class="phase-row"><span id="phaseLabel" class="phase">Ready</span><span id="roundLabel" class="round"></span></div>
       <div class="timer" id="timer" aria-live="off"></div>
@@ -156,6 +162,7 @@ input[type=range]{width:42%;flex:none;accent-color:var(--gold);margin:0}
     </section>
 
     <section id="view-combos" class="view" role="tabpanel" hidden>
+      <img class="art" src="images/low-kick.jpg" alt="A fighter landing a rear low kick on a heavy bag" width="1400" height="933">
       <div class="combos-head">
         <div><h2 class="h">The twenty</h2><p class="sub" id="comboCount"></p></div>
         <button class="btn small ghost" id="btnAllOn">All on</button>
